@@ -1,0 +1,74 @@
+# 버전 1 : 버전명 생략, volumes, networks, build arguments 사용 불가
+# 버전 2 : Docker Engine 1.10.0+ 에서 동작, volumes,networks 사용 가능
+# 버전 3 : 매개 변수 새롭게 추가, 3.0의 경우 1.13.0+ 에서 동작
+version: '3'
+networks:
+  toda:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.57.0.0/16
+services:
+  certbot:
+    image: certbot/certbot
+    container_name: certbot
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+
+# 172.57.0.2 할당
+  api:
+    networks: 
+      toda:
+        ipv4_address: 172.57.0.2
+    build:
+      context: ${PWD}/api
+      dockerfile: ${PWD}/api/Dockerfile
+      args:
+        - SERVER_NAME=${SERVER_NAME}
+        - DB_NAME=${DB_NAME}
+        - DB_HOST=${DB_HOST}
+        - DB_USER=${DB_USER}
+        - DB_PW=${DB_PW}
+        - FCM_ALARM=172.57.0.3
+        - REDIS_HOST=172.57.0.4
+    image: toda:php
+    container_name: toda_php
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt
+      - /var/lib/letsencrypt:/var/lib/letsencrypt
+      - /var/www/certbot:/var/www/certbot
+    restart: always
+    ports:
+      - 80:80
+      - 443:443
+
+# 172.57.0.3 할당
+  utils:
+    networks: 
+      toda:
+        ipv4_address: 172.57.0.3
+    build:
+      context: ${PWD}/utils
+      dockerfile: ${PWD}/utils/Dockerfile
+      args:
+        - DB_NAME=${DB_NAME}
+        - DB_HOST=${DB_HOST}
+        - DB_USER=${DB_USER}
+        - DB_PW=${DB_PW}
+        - MAIL_PW=${MAIL_PW}
+        - FCM_TOKEN=${FCM_TOKEN}
+    image: toda:utils
+    container_name: toda_utils
+    restart: always
+
+# 172.57.0.4 할당
+  redis:
+    networks:
+      toda:
+        ipv4_address: 172.57.0.4
+    image: redis:7.0.11
+    container_name: redis
